@@ -18,38 +18,28 @@ const (
 
 // compareEntityDates performs date comparisons based on entity type
 func compareEntityDates[Q any, I any](w io.Writer, query Entity[Q], index Entity[I], weight float64) ScorePiece {
-	var dateScore float64
-	var fieldsCompared int
-	var matched bool
-
 	switch query.Type {
 	case EntityPerson:
-		dateScore, matched, fieldsCompared = comparePersonDates(query.Person, index.Person)
+		return comparePersonDates(query.Person, index.Person, weight)
 	case EntityBusiness:
-		dateScore, matched, fieldsCompared = compareBusinessDates(query.Business, index.Business)
+		return compareBusinessDates(query.Business, index.Business, weight)
 	case EntityOrganization:
-		dateScore, matched, fieldsCompared = compareOrgDates(query.Organization, index.Organization)
+		return compareOrgDates(query.Organization, index.Organization, weight)
 	case EntityVessel, EntityAircraft:
-		dateScore, matched, fieldsCompared = compareAssetDates(query.Type, query, index)
+		return compareAssetDates(query.Type, query, index, weight)
 	}
+	return NoScore()
 
-	return ScorePiece{
-		Score:          dateScore,
-		Weight:         weight,
-		Matched:        matched,
-		Required:       fieldsCompared > 0,
-		Exact:          dateScore > 0.99,
-		FieldsCompared: fieldsCompared,
-		PieceType:      "dates",
-	}
 }
 
 // comparePersonDates handles birth and death dates
-func comparePersonDates(query *Person, index *Person) (float64, bool, int) {
+func comparePersonDates(query *Person, index *Person, weight float64) ScorePiece {
 	if query == nil || index == nil {
-		return 0, false, 0
+		return NoScore()
 	}
-
+	if query.BirthDate == nil && query.DeathDate == nil {
+		return NoScore()
+	}
 	fieldsCompared := 0
 	var scores []float64
 
@@ -66,7 +56,7 @@ func comparePersonDates(query *Person, index *Person) (float64, bool, int) {
 	}
 
 	if len(scores) == 0 {
-		return 0, false, fieldsCompared
+		return ScorePiece{Weight: weight, PieceType: "dates"}
 	}
 
 	// Calculate average score
@@ -76,14 +66,25 @@ func comparePersonDates(query *Person, index *Person) (float64, bool, int) {
 	if fieldsCompared == 2 && !areDatesLogical(query, index) {
 		avgScore *= 0.5 // Penalty for illogical dates
 	}
+	return ScorePiece{
+		Score:          avgScore,
+		Weight:         weight,
+		Matched:        avgScore > 0.7,
+		Required:       fieldsCompared > 0,
+		Exact:          avgScore > 0.99,
+		FieldsCompared: fieldsCompared,
+		PieceType:      "dates",
+	}
 
-	return avgScore, avgScore > 0.7, fieldsCompared
 }
 
 // compareBusinessDates handles business dates
-func compareBusinessDates(query *Business, index *Business) (float64, bool, int) {
+func compareBusinessDates(query *Business, index *Business, weight float64) ScorePiece {
 	if query == nil || index == nil {
-		return 0, false, 0
+		return NoScore()
+	}
+	if query.Created == nil && query.Dissolved == nil {
+		return NoScore()
 	}
 
 	fieldsCompared := 0
@@ -102,19 +103,29 @@ func compareBusinessDates(query *Business, index *Business) (float64, bool, int)
 	}
 
 	if len(scores) == 0 {
-		return 0, false, fieldsCompared
+		return ScorePiece{Weight: weight, PieceType: "dates"}
 	}
 
 	avgScore := calculateAverage(scores)
-	return avgScore, avgScore > 0.7, fieldsCompared
+	return ScorePiece{
+		Score:          avgScore,
+		Weight:         weight,
+		Matched:        avgScore > 0.7,
+		Required:       fieldsCompared > 0,
+		Exact:          avgScore > 0.99,
+		FieldsCompared: fieldsCompared,
+		PieceType:      "dates",
+	}
 }
 
 // compareOrgDates handles organization dates
-func compareOrgDates(query *Organization, index *Organization) (float64, bool, int) {
+func compareOrgDates(query *Organization, index *Organization, weight float64) ScorePiece {
 	if query == nil || index == nil {
-		return 0, false, 0
+		return NoScore()
 	}
-
+	if query.Created == nil && query.Dissolved == nil {
+		return NoScore()
+	}
 	fieldsCompared := 0
 	var scores []float64
 
@@ -131,38 +142,56 @@ func compareOrgDates(query *Organization, index *Organization) (float64, bool, i
 	}
 
 	if len(scores) == 0 {
-		return 0, false, fieldsCompared
+		return ScorePiece{Weight: weight, PieceType: "dates"}
 	}
 
 	avgScore := calculateAverage(scores)
-	return avgScore, avgScore > 0.7, fieldsCompared
+	return ScorePiece{
+		Score:          avgScore,
+		Weight:         weight,
+		Matched:        avgScore > 0.7,
+		Required:       fieldsCompared > 0,
+		Exact:          avgScore > 0.99,
+		FieldsCompared: fieldsCompared,
+		PieceType:      "dates",
+	}
 }
 
 // compareAssetDates handles vessel and aircraft dates
-func compareAssetDates[Q any, I any](entityType EntityType, query Entity[Q], index Entity[I]) (float64, bool, int) {
+func compareAssetDates[Q any, I any](entityType EntityType, query Entity[Q], index Entity[I], weight float64) ScorePiece {
 	fieldsCompared := 0
-	var builtDate1, builtDate2 *time.Time
+	var qDate, iDate *time.Time
 
 	switch entityType {
 	case EntityVessel:
 		if query.Vessel != nil && index.Vessel != nil {
-			builtDate1 = query.Vessel.Built
-			builtDate2 = index.Vessel.Built
+			qDate = query.Vessel.Built
+			iDate = index.Vessel.Built
 		}
 	case EntityAircraft:
 		if query.Aircraft != nil && index.Aircraft != nil {
-			builtDate1 = query.Aircraft.Built
-			builtDate2 = index.Aircraft.Built
+			qDate = query.Aircraft.Built
+			iDate = index.Aircraft.Built
 		}
 	}
-
-	if builtDate1 == nil || builtDate2 == nil {
-		return 0, false, fieldsCompared
+	if qDate == nil {
+		return NoScore()
+	}
+	if iDate == nil {
+		return ScorePiece{Weight: weight, PieceType: "dates"}
 	}
 
 	fieldsCompared = 1
-	score := compareDates(builtDate1, builtDate2)
-	return score, score > 0.7, fieldsCompared
+	score := compareDates(qDate, iDate)
+	return ScorePiece{
+		Score:          score,
+		Weight:         weight,
+		Matched:        score > 0.7,
+		Required:       fieldsCompared > 0,
+		Exact:          score > 0.99,
+		FieldsCompared: fieldsCompared,
+		PieceType:      "dates",
+	}
 }
 
 const (

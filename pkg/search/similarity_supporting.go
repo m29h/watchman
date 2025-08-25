@@ -10,7 +10,9 @@ import (
 func compareSupportingInfo[Q any, I any](w io.Writer, query Entity[Q], index Entity[I], weight float64) ScorePiece {
 	fieldsCompared := 0
 	var scores []float64
-
+	if query.SanctionsInfo == nil && len(query.HistoricalInfo) == 0 {
+		return NoScore()
+	}
 	// Compare sanctions
 	if query.SanctionsInfo != nil && index.SanctionsInfo != nil {
 		fieldsCompared++

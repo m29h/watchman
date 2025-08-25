@@ -31,7 +31,7 @@ type nameMatch struct {
 func compareName[Q any, I any](w io.Writer, query Entity[Q], index Entity[I], weight float64) ScorePiece {
 	// Early return for empty query
 	if query.PreparedFields.Name == "" {
-		return ScorePiece{Score: 0, Weight: 0, FieldsCompared: 0, PieceType: "name"}
+		return NoScore()
 	}
 
 	// Exact match fast path
@@ -187,7 +187,7 @@ var (
 
 func compareEntityTitlesFuzzy[Q any, I any](w io.Writer, query Entity[Q], index Entity[I], weight float64) ScorePiece {
 	if query.Person == nil || index.Person == nil {
-		return ScorePiece{Score: 0, Weight: 0, FieldsCompared: 0, PieceType: "titles"}
+		return NoScore()
 	}
 
 	// Prepare normalized index titles once

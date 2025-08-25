@@ -171,6 +171,10 @@ type ScorePiece struct {
 	PieceType      string  `json:"pieceType"`      // e.g. "identifiers", "name", etc.
 }
 
+func NoScore() ScorePiece {
+	return ScorePiece{Score: 0, Weight: 0, Matched: false, Exact: false, FieldsCompared: 0, PieceType: "not-searched-for"}
+}
+
 func boolToScore(b bool) float64 {
 	if b {
 		return 1.0
@@ -208,7 +212,6 @@ const (
 // entityFields tracks required and available fields for an entity
 type entityFields struct {
 	required    int
-	available   int
 	hasName     bool
 	hasID       bool
 	hasCritical bool
@@ -216,6 +219,16 @@ type entityFields struct {
 }
 
 func calculateFinalScore[Q any, I any](w io.Writer, pieces []ScorePiece, exactOverride bool, query Entity[Q], index Entity[I]) float64 {
+	//remove NoScore pieces
+	tmp := []ScorePiece{}
+	for _, p := range pieces {
+		if p == NoScore() {
+			continue
+		}
+		tmp = append(tmp, p)
+
+	}
+	pieces = tmp
 	if len(pieces) == 0 {
 		return 0
 	}
@@ -300,7 +313,7 @@ func calculateBaseScore(pieces []ScorePiece, fields entityFields) float64 {
 }
 
 func calculateCoverage[I any](w io.Writer, pieces []ScorePiece, index Entity[I]) coverage {
-	indexFields := countAvailableFields(index)
+	indexFields := len(pieces)
 	if indexFields == 0 {
 		return coverage{ratio: 1.0, criticalRatio: 1.0}
 	}
@@ -357,7 +370,7 @@ func applyPenaltiesAndBonuses(w io.Writer, baseScore float64, cov coverage, fiel
 	}
 
 	// Lighter minimum fields requirement
-	if fields.required < 2 {
+	if fields.required == 0 {
 		score *= 0.90
 
 		if w != nil {
@@ -384,174 +397,4 @@ func applyPenaltiesAndBonuses(w io.Writer, baseScore float64, cov coverage, fiel
 	}
 
 	return score
-}
-
-func countAvailableFields[I any](index Entity[I]) int {
-	var count int
-
-	// Count type-specific fields
-	switch index.Type {
-	case EntityPerson:
-		count = countPersonFields(index.Person)
-	case EntityBusiness:
-		count = countBusinessFields(index.Business)
-	case EntityOrganization:
-		count = countOrganizationFields(index.Organization)
-	case EntityVessel:
-		count = countVesselFields(index.Vessel)
-	case EntityAircraft:
-		count = countAircraftFields(index.Aircraft)
-	}
-
-	// Count common fields
-	count += countCommonFields(index)
-
-	return count
-}
-
-func countCommonFields[I any](index Entity[I]) int {
-	count := 0
-
-	if index.Name != "" {
-		count++
-	}
-	if index.Source != "" {
-		count++
-	}
-	if len(index.Contact.EmailAddresses) > 0 {
-		count++
-	}
-	if len(index.Contact.PhoneNumbers) > 0 {
-		count++
-	}
-	if len(index.Contact.FaxNumbers) > 0 {
-		count++
-	}
-	if len(index.CryptoAddresses) > 0 {
-		count++
-	}
-	if len(index.Affiliations) > 0 {
-		count++
-	}
-	if len(index.Addresses) > 0 {
-		count++
-	}
-
-	return count
-}
-
-func countPersonFields(p *Person) int {
-	if p == nil {
-		return 0
-	}
-
-	count := 0
-	if p.BirthDate != nil {
-		count++
-	}
-	if p.Gender != "" {
-		count++
-	}
-	if len(p.Titles) > 0 {
-		count++
-	}
-	if len(p.GovernmentIDs) > 0 {
-		count++
-	}
-
-	return count
-}
-
-func countBusinessFields(b *Business) int {
-	if b == nil {
-		return 0
-	}
-
-	count := 0
-	if b.Name != "" {
-		count++
-	}
-	if len(b.AltNames) > 0 {
-		count++
-	}
-	if b.Created != nil {
-		count++
-	}
-	if len(b.GovernmentIDs) > 0 {
-		count++
-	}
-
-	return count
-}
-
-func countOrganizationFields(o *Organization) int {
-	if o == nil {
-		return 0
-	}
-
-	count := 0
-	if o.Name != "" {
-		count++
-	}
-	if len(o.AltNames) > 0 {
-		count++
-	}
-	if o.Created != nil {
-		count++
-	}
-	if len(o.GovernmentIDs) > 0 {
-		count++
-	}
-
-	return count
-}
-
-func countVesselFields(v *Vessel) int {
-	if v == nil {
-		return 0
-	}
-
-	count := 0
-	if v.IMONumber != "" {
-		count++
-	}
-	if v.CallSign != "" {
-		count++
-	}
-	if v.MMSI != "" {
-		count++
-	}
-	if v.Flag != "" {
-		count++
-	}
-	if v.Model != "" {
-		count++
-	}
-	if v.Owner != "" {
-		count++
-	}
-
-	return count
-}
-
-func countAircraftFields(a *Aircraft) int {
-	if a == nil {
-		return 0
-	}
-
-	count := 0
-	if a.ICAOCode != "" {
-		count++
-	}
-	if a.Model != "" {
-		count++
-	}
-	if a.Flag != "" {
-		count++
-	}
-	if a.SerialNumber != "" {
-		count++
-	}
-
-	return count
 }

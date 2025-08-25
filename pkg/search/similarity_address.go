@@ -20,13 +20,18 @@ const (
 func compareAddresses[Q any, I any](w io.Writer, query Entity[Q], index Entity[I], weight float64) ScorePiece {
 	fieldsCompared := 0
 	var scores []float64
-
+	if len(index.Addresses) == 0 {
+		return NoScore()
+	}
 	if w != nil {
 		debug(w, "address comparison details: query=%d  index=%d\n", len(query.Addresses), len(index.Addresses))
 	}
 
 	// Compare addresses
-	if len(query.Addresses) > 0 && len(index.Addresses) > 0 {
+	if len(query.Addresses) == 0 {
+		return NoScore()
+	}
+	if len(index.Addresses) > 0 {
 		fieldsCompared++
 
 		if score := findBestAddressMatch(w, query.PreparedFields.Addresses, index.PreparedFields.Addresses); score > 0 {

@@ -19,7 +19,7 @@ func compareExactIdentifiers[Q any, I any](w io.Writer, query Entity[Q], index E
 	case EntityAircraft:
 		return compareAircraftExactIDs(w, query.Aircraft, index.Aircraft, weight)
 	default:
-		return ScorePiece{Score: 0, Weight: 0, FieldsCompared: 0, PieceType: "identifiers"}
+		return NoScore()
 	}
 }
 
@@ -30,16 +30,18 @@ func normalizeIdentifier(id string) string {
 // comparePersonExactIDs checks exact matches for Person-specific identifiers
 func comparePersonExactIDs(w io.Writer, query *Person, index *Person, weight float64) ScorePiece {
 	if query == nil || index == nil {
-		return ScorePiece{Score: 0, Weight: 0, FieldsCompared: 0, PieceType: "identifiers"}
+		return NoScore()
 	}
-
+	if len(query.GovernmentIDs) == 0 {
+		return NoScore()
+	}
 	fieldsCompared := 0
 	totalWeight := 0.0
 	score := 0.0
 	hasMatch := false
 
 	// Government IDs (extremely high weight for exact matches)
-	if len(query.GovernmentIDs) > 0 && len(index.GovernmentIDs) > 0 {
+	if len(index.GovernmentIDs) > 0 {
 		fieldsCompared++
 		totalWeight += 15.0
 		for _, qID := range query.GovernmentIDs {
@@ -75,7 +77,10 @@ GovIDDone:
 // compareBusinessExactIDs checks exact matches for Business-specific identifiers
 func compareBusinessExactIDs(w io.Writer, query *Business, index *Business, weight float64) ScorePiece {
 	if query == nil || index == nil {
-		return ScorePiece{Score: 0, Weight: 0, FieldsCompared: 0, PieceType: "identifiers"}
+		return NoScore()
+	}
+	if len(query.GovernmentIDs) == 0 {
+		return NoScore()
 	}
 
 	fieldsCompared := 0
@@ -84,7 +89,7 @@ func compareBusinessExactIDs(w io.Writer, query *Business, index *Business, weig
 	hasMatch := false
 
 	// Business Registration/Tax IDs
-	if len(query.GovernmentIDs) > 0 && len(index.GovernmentIDs) > 0 {
+	if len(index.GovernmentIDs) > 0 {
 		fieldsCompared++
 		totalWeight += 15.0
 		for _, qID := range query.GovernmentIDs {
@@ -121,7 +126,10 @@ IdentifierDone:
 // compareOrgExactIDs checks exact matches for Organization-specific identifiers
 func compareOrgExactIDs(w io.Writer, query *Organization, index *Organization, weight float64) ScorePiece {
 	if query == nil || index == nil {
-		return ScorePiece{Score: 0, Weight: 0, FieldsCompared: 0, PieceType: "identifiers"}
+		return NoScore()
+	}
+	if len(query.GovernmentIDs) == 0 {
+		return NoScore()
 	}
 
 	fieldsCompared := 0
@@ -130,7 +138,7 @@ func compareOrgExactIDs(w io.Writer, query *Organization, index *Organization, w
 	hasMatch := false
 
 	// Organization Registration/Tax IDs
-	if len(query.GovernmentIDs) > 0 && len(index.GovernmentIDs) > 0 {
+	if len(index.GovernmentIDs) > 0 {
 		fieldsCompared++
 		totalWeight += 15.0
 		for _, qID := range query.GovernmentIDs {
@@ -167,9 +175,11 @@ IdentifierDone:
 // compareVesselExactIDs checks exact matches for Vessel-specific identifiers
 func compareVesselExactIDs(w io.Writer, query *Vessel, index *Vessel, weight float64) ScorePiece {
 	if query == nil || index == nil {
-		return ScorePiece{Score: 0, Weight: 0, FieldsCompared: 0, PieceType: "identifiers"}
+		return NoScore()
 	}
-
+	if query.IMONumber == "" && query.CallSign == "" && query.MMSI == "" {
+		return NoScore()
+	}
 	fieldsCompared := 0
 	totalWeight := 0.0
 	score := 0.0
@@ -224,7 +234,10 @@ func compareVesselExactIDs(w io.Writer, query *Vessel, index *Vessel, weight flo
 // compareAircraftExactIDs checks exact matches for Aircraft-specific identifiers
 func compareAircraftExactIDs(w io.Writer, query *Aircraft, index *Aircraft, weight float64) ScorePiece {
 	if query == nil || index == nil {
-		return ScorePiece{Score: 0, Weight: 0, FieldsCompared: 0, PieceType: "identifiers"}
+		return NoScore()
+	}
+	if query.SerialNumber == "" && query.ICAOCode == "" {
+		return NoScore()
 	}
 
 	fieldsCompared := 0
@@ -272,9 +285,11 @@ func compareExactCryptoAddresses[Q any, I any](w io.Writer, query Entity[Q], ind
 	fieldsCompared := 0
 	hasMatch := false
 	score := 0.0
-
+	if len(query.CryptoAddresses) == 0 {
+		return NoScore()
+	}
 	// Early return if either list is empty
-	if len(query.CryptoAddresses) == 0 || len(index.CryptoAddresses) == 0 {
+	if len(index.CryptoAddresses) == 0 {
 		return ScorePiece{
 			Score:          0,
 			Weight:         weight,
@@ -336,15 +351,7 @@ func compareExactGovernmentIDs[Q any, I any](w io.Writer, query Entity[Q], index
 	case EntityOrganization:
 		return compareOrgGovernmentIDs(query.Organization, index.Organization, weight)
 	default:
-		return ScorePiece{
-			Score:          0,
-			Weight:         weight,
-			Matched:        false,
-			Required:       false,
-			Exact:          false,
-			FieldsCompared: 0,
-			PieceType:      "gov-ids-exact",
-		}
+		return NoScore()
 	}
 }
 
@@ -384,13 +391,15 @@ func compareIdentifiers(queryID, indexID string, queryCountry, indexCountry stri
 
 func comparePersonGovernmentIDs(query *Person, index *Person, weight float64) ScorePiece {
 	if query == nil || index == nil {
-		return ScorePiece{Score: 0, Weight: weight, FieldsCompared: 0, PieceType: "gov-ids-exact"}
+		return NoScore()
 	}
 
 	qIDs := query.GovernmentIDs
 	iIDs := index.GovernmentIDs
-
-	if len(qIDs) == 0 || len(iIDs) == 0 {
+	if len(qIDs) == 0 {
+		return NoScore()
+	}
+	if len(iIDs) == 0 {
 		return ScorePiece{Score: 0, Weight: weight, FieldsCompared: 0, PieceType: "gov-ids-exact"}
 	}
 
@@ -423,13 +432,15 @@ Done:
 
 func compareBusinessGovernmentIDs(query *Business, index *Business, weight float64) ScorePiece {
 	if query == nil || index == nil {
-		return ScorePiece{Score: 0, Weight: weight, FieldsCompared: 0, PieceType: "gov-ids-exact"}
+		return NoScore()
 	}
 
 	qIDs := query.GovernmentIDs
 	iIDs := index.GovernmentIDs
-
-	if len(qIDs) == 0 || len(iIDs) == 0 {
+	if len(qIDs) == 0 {
+		return NoScore()
+	}
+	if len(iIDs) == 0 {
 		return ScorePiece{Score: 0, Weight: weight, FieldsCompared: 0, PieceType: "gov-ids-exact"}
 	}
 
@@ -463,13 +474,15 @@ Done:
 
 func compareOrgGovernmentIDs(query *Organization, index *Organization, weight float64) ScorePiece {
 	if query == nil || index == nil {
-		return ScorePiece{Score: 0, Weight: weight, FieldsCompared: 0, PieceType: "gov-ids-exact"}
+		return NoScore()
 	}
 
 	qIDs := query.GovernmentIDs
 	iIDs := index.GovernmentIDs
-
-	if len(qIDs) == 0 || len(iIDs) == 0 {
+	if len(qIDs) == 0 {
+		return NoScore()
+	}
+	if len(iIDs) == 0 {
 		return ScorePiece{Score: 0, Weight: weight, FieldsCompared: 0, PieceType: "gov-ids-exact"}
 	}
 
@@ -555,7 +568,9 @@ type contactFieldMatch struct {
 func compareExactContactInfo[Q any, I any](w io.Writer, query Entity[Q], index Entity[I], weight float64) ScorePiece {
 	fieldsCompared := 0
 	var matches []contactFieldMatch
-
+	if len(query.Contact.EmailAddresses) == 0 && len(query.PreparedFields.Contact.PhoneNumbers) == 0 && len(query.PreparedFields.Contact.FaxNumbers) == 0 {
+		return NoScore()
+	}
 	// Compare emails (exact match)
 	if len(query.Contact.EmailAddresses) > 0 && len(index.Contact.EmailAddresses) > 0 {
 		fieldsCompared++
